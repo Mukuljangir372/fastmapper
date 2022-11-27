@@ -3,19 +3,24 @@ package com.mukul.jan.fastmapper.lib
 import com.mukul.jan.fastmapper.lib.dsl.KotlinDslMappingDefinitionBuilder
 import com.mukul.jan.fastmapper.lib.mapping.FieldMapping
 import com.mukul.jan.fastmapper.lib.mapping.MappingDefinition
+import com.mukul.jan.fastmapper.lib.mapping.ResolvedFieldMapping
+import com.mukul.jan.fastmapper.lib.transformer.DefaultMappingTransformer
+import com.mukul.jan.fastmapper.lib.transformer.MappingTransformer
+import com.mukul.jan.fastmapper.lib.transformer.MappingTransformerContext
 import com.mukul.jan.fastmapper.lib.utils.getValue
 import com.mukul.jan.fastmapper.lib.utils.setValue
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 class FastMapper private constructor(
-    val mappingDefinitions: MutableSet<MappingDefinition>
+    val mappingDefinitions: MutableSet<MappingDefinition>,
+    val transformers: MutableSet<MappingTransformer<*, *>>
 ) {
 
     /**
      * Map From -> To
      */
-    fun <From : Any, To : Any> map(from: From, to: To): To {
+    private fun <From : Any, To : Any> map(from: From, to: To): To {
         val definition = withMappingDefinition(from, to)
         definition.fields.forEach {
             withMapField(from = from, to = to, fieldMapping = it)
@@ -54,9 +59,10 @@ class FastMapper private constructor(
     /**
      * Map the field
      */
+    @Suppress("UNCHECKED_CAST")
     private fun <From : Any, To : Any> withMapField(
-        from: From, to: To, fieldMapping: FieldMapping
-    ): FieldMapping {
+        from: From, to: To, fieldMapping: ResolvedFieldMapping
+    ): ResolvedFieldMapping {
         val fromField = fieldMapping.fromField
         val toField = fieldMapping.toField
         val fromFieldType = fromField.type
@@ -65,12 +71,67 @@ class FastMapper private constructor(
         fromField.isAccessible = true
         toField.isAccessible = true
 
-        if (fromFieldType != toFieldType) {
-            throw IllegalArgumentException("Type mismatch: ${from::class.java.simpleName} ${fromField.name} ${fromFieldType.name} while mapping with ${to::class.java.simpleName} ${toField.name} ${toFieldType.name}")
-        }
+        val autoRegisteredTransformer = findTransformer(
+            transformers = transformers.toList(),
+            fromType = fromFieldType,
+            toType = toFieldType
+        )
 
-        toField.setValue(to, fromField.getValue(from))
+        try {
+            val valueToSet = if (fieldMapping.transformer.isNotEmpty()) {
+                val transformer = findTransformer(
+                    transformers = fieldMapping.transformer,
+                    fromType = fromFieldType,
+                    toType = toFieldType
+                )
+                val context = MappingTransformerContext(
+                    toField = toField,
+                    fromField = fromField,
+                    fromType = fromFieldType,
+                    toType = toFieldType,
+                    fromFieldOriginalValue = fromField.getValue(from)
+                )
+                transformer?.transform(context)
+            } else if (autoRegisteredTransformer != null) {
+                val context = MappingTransformerContext(
+                    toField = toField,
+                    fromField = fromField,
+                    fromType = fromFieldType,
+                    toType = toFieldType,
+                    fromFieldOriginalValue = fromField.getValue(from)
+                )
+                autoRegisteredTransformer.transform(context)
+            } else {
+                fromField.getValue(from)
+            }
+            toField.setValue(to, valueToSet)
+        } catch (e: Exception) {
+            val exception =
+                java.lang.Exception("Failed to map: ${from::class.java.simpleName} ${fromField.name} ${fromFieldType.name} while mapping with ${to::class.java.simpleName} ${toField.name} ${toFieldType.name}")
+            exception.initCause(e)
+            throw exception
+        }
         return fieldMapping
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private inline fun <reified FromType : Any, reified ToType : Any> findTransformer(
+        transformers: List<MappingTransformer<*, *>>,
+        fromType: FromType,
+        toType: ToType
+    ): MappingTransformer<FromType, ToType>? {
+        var transformer: MappingTransformer<FromType, ToType>? = null
+        run breaker@{
+            transformers.forEach {
+                transformer = try {
+                    it as MappingTransformer<FromType, ToType>
+                    return@breaker
+                } catch (e: Exception) {
+                    null
+                }
+            }
+        }
+        return transformer
     }
 
     /**
@@ -92,15 +153,19 @@ class FastMapper private constructor(
          */
         private val mappingDefinitions: MutableSet<MappingDefinition> = Collections.newSetFromMap(
             ConcurrentHashMap()
+        ),
+        val transformers: MutableSet<MappingTransformer<*, *>> = Collections.newSetFromMap(
+            ConcurrentHashMap()
         )
     ) {
         companion object {
             fun build(block: Builder.() -> Unit) = Builder().apply(block).build()
+            fun build() = Builder().build()
         }
 
         fun build(): FastMapper {
             return FastMapper(
-                mappingDefinitions = mappingDefinitions
+                mappingDefinitions = mappingDefinitions, transformers = transformers
             )
         }
 
@@ -131,6 +196,27 @@ class FastMapper private constructor(
          */
         fun withMapping(definition: MappingDefinition): Builder {
             this.mappingDefinitions.add(definition)
+            return this
+        }
+
+        /**
+         * Add/Build Mapping Field Transformer
+         */
+
+        inline fun <reified FromType, reified ToType> withTransformer(
+            noinline transform: (value: FromType?) -> ToType
+        ): Builder {
+            val transformer = DefaultMappingTransformer(transform)
+            withTransformer(transformer)
+            return this
+        }
+
+        /**
+         * Add Mapping Field Transformer to Builder
+         */
+
+        inline fun <reified FromType, reified ToType> withTransformer(transformer: MappingTransformer<FromType, ToType>): Builder {
+            this.transformers.add(transformer)
             return this
         }
     }
