@@ -110,6 +110,17 @@ class FastMapper private constructor(
         }
 
         /**
+         * Add/Build Mapping Definition
+         */
+        inline fun <reified From : Any, reified To : Any> withMapping(): Builder {
+            val definition = KotlinDslMappingDefinitionBuilder(
+                fromClazz = From::class.java, toClazz = To::class.java
+            ).build()
+            withMapping(definition)
+            return this
+        }
+
+        /**
          * Add Mapping Definition
          */
         fun withMapping(definition: MappingDefinition): Builder {

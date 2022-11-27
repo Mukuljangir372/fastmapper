@@ -12,9 +12,7 @@ class FastMapperTest {
     @Before
     fun setup() {
         mapper = FastMapper.Builder.build {
-            withMapping<TestModelSource, TestModelTarget> {
-
-            }
+            withMapping<TestModelSource, TestModelTarget>()
         }
     }
 
