@@ -1,7 +1,7 @@
 # FastMapper
 FastMapper is a kotlin DSL based auto mapping library for kotlin and android applications.
 
-![alt text](https://github.com/Mukuljangir372/Reactive-Store/blob/master/reactive-image.png)
+![alt text](https://github.com/Mukuljangir372/fastmapper/blob/master/fastmapper-logo.png)
 
 ## Add FastMapper to your project
 ### Step 1. Add the JitPack repository to your build file
