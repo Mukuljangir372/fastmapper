@@ -59,9 +59,15 @@ class FastMapper private constructor(
     ): FieldMapping {
         val fromField = fieldMapping.fromField
         val toField = fieldMapping.toField
+        val fromFieldType = fromField.type
+        val toFieldType = toField.type
+
         fromField.isAccessible = true
         toField.isAccessible = true
 
+        if (fromFieldType != toFieldType) {
+            throw IllegalArgumentException("Type mismatch: ${from::class.java.simpleName} ${fromField.name} ${fromFieldType.name} while mapping with ${to::class.java.simpleName} ${toField.name} ${toFieldType.name}")
+        }
 
         toField.setValue(to, fromField.getValue(from))
         return fieldMapping

@@ -23,7 +23,7 @@ class FastMapperTest {
             model = TestModel(name = "hi")
         )
         val resultTarget: TestModelTarget = mapper.map(sourceModel)
-        assertEquals(sourceModel.name,resultTarget.name2)
+        assertEquals(sourceModel.name,resultTarget.name)
     }
 }
 

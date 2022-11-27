@@ -6,7 +6,7 @@ data class TestModelSource(
 )
 
 data class TestModelTarget(
-    val name2: String = "",
+    val name: String = "",
     val name3: String = "",
     val model: TestModel = TestModel()
 )
